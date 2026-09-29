@@ -9,6 +9,7 @@ Guidance for Claude Code when working in this repository.
 ## Commands
 
 - `composer test` — PHPUnit. `Unit` needs no server; `Feature` needs XTDB on 127.0.0.1:5435 (`docker run -d --name xtdb-beta3 -p 127.0.0.1:5435:5432 -p 127.0.0.1:8083:8080 ghcr.io/xtdb/xtdb:2.2.0-beta3`, add `--tmpfs /var/lib/xtdb:uid=20000,gid=20000` for a disposable store). Feature tests must pass twice in a row (tables survive erasure).
+- `composer test:known-issues` — `tests/KnownIssues`: XTDB bugs and PostgreSQL differences in plain SQL, asserting PostgreSQL behaviour. Excluded from `composer test`; failures are expected until XTDB fixes them (a test that starts passing means a workaround can be reconsidered). Add one for every new XTDB limit the driver works around.
 - `composer phpstan` (level 8, larastan), `composer cs` / `composer cs:fix` (Pint).
 
 ## Architecture
@@ -23,6 +24,7 @@ Guidance for Claude Code when working in this repository.
 - `src/Query/Processor.php` — XTDB types (`:utf8`, `[:? :i64]`, `[:timestamp-local :micro]`...) mapped to PostgreSQL names.
 - `src/Schema/Grammar.php`, `Builder.php` — `create`/`table` → `create table t (cols)` (2.2+, no types); drop → `ERASE` (`dropIfExists` checks `hasTable`: ERASE fails on unknown tables); indexes/keys are no-ops; `$transactions = false`; `information_schema` queries.
 - `src/Eloquent/HasXtdbKey.php` — `_id` key via `HasUlids`.
+- Requires `vuthaihoc/laravel-db-portable` (`../laravel-db-portable`): `Query\Builder` implements its `HistoricalReads` (`asOfTime()` → `FOR SYSTEM_TIME AS OF`, compiled in `Grammar::compileFrom()` between table and alias) and `SearchBox` (`position()`-based; no full-text).
 
 ## XTDB pitfalls (2.2.0-beta3)
 
@@ -32,6 +34,7 @@ Guidance for Claude Code when working in this repository.
 - `min/max/sum/avg` over a never-valued column (type `:nothing`) raise errors.
 - `? = any(list) and <other>` loses rows when the list is null elsewhere; `any(coalesce(list, []))` crashes the server.
 - `update`/`delete` report 0 affected rows; `RETURNING` is ignored; `insert` of an existing `_id` replaces the row.
+- `LIKE ... ESCAPE` matches nothing (no literal `%`/`_`): use `position()`.
 - No `ilike`, `for update`, `on conflict`, `random()`, window functions, subqueries in `UPDATE ... SET`, `HAVING` on aliases.
 
 ## Rules

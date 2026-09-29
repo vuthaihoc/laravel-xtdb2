@@ -2,6 +2,7 @@
 
 namespace LaravelXtdb\Query;
 
+use Illuminate\Contracts\Database\Query\Expression;
 use Illuminate\Database\Query\Builder as BaseBuilder;
 use Illuminate\Database\Query\Grammars\PostgresGrammar;
 use LaravelXtdb\Exceptions\UnsupportedFeatureException;
@@ -12,6 +13,25 @@ use LaravelXtdb\XtdbConnection;
  */
 class Grammar extends PostgresGrammar
 {
+    /**
+     * FOR SYSTEM_TIME AS OF goes between the table and its alias.
+     *
+     * @param  Expression|string  $table
+     */
+    protected function compileFrom(BaseBuilder $query, $table)
+    {
+        if (! $query instanceof Builder || $query->systemTime === null || ! is_string($table)) {
+            return parent::compileFrom($query, $table); // @phpstan-ignore argument.type (Laravel accepts expressions)
+        }
+
+        $clause = ' for system_time as of '.$query->systemTime;
+        $parts = preg_split('/\s+as\s+/i', $table) ?: [$table];
+
+        return count($parts) === 2
+            ? 'from '.$this->wrapTable($parts[0]).$clause.' as '.$this->wrapValue($this->getTablePrefix().$parts[1])
+            : 'from '.$this->wrapTable($table).$clause;
+    }
+
     /**
      * XTDB has no RETURNING: the builder generates the key before inserting.
      *

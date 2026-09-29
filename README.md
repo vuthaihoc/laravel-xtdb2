@@ -139,13 +139,31 @@ advice. Nested transactions are part of the outer one (XTDB has no savepoints).
 | `min`/`max`/`sum`/`avg` of a column that never held a value | `null` (XTDB raises an error; the driver returns null) |
 
 XTDB 2.2.0-beta3 issues the driver works around: `? = any(list)` followed by another `AND` condition loses rows when
-the list is null in other rows (compiled as `(? = any(list)) is true`).
+the list is null in other rows (compiled as `(? = any(list)) is true`), and `LIKE ... ESCAPE` matches nothing, so `%`
+and `_` cannot be matched literally with `like` (the search helpers use `position()`).
+
+## laravel-db-portable
+
+The driver requires [laravel-db-portable](https://github.com/vuthaihoc/laravel-db-portable), and its query builder
+implements that package's contracts:
+
+- `HistoricalReads`: `asOfTime($time)` reads the `from` table as XTDB had stored it then
+  (`FOR SYSTEM_TIME AS OF`; a DateTimeInterface, a timestamp or `'-10s'`), `readCurrent()` undoes it,
+  `readStale()` reads current data (reads do not contend with writes).
+- `SearchBox`: `whereStartsWith()`, `whereContains()` and `suggest()` compare `lower()` values with `position()`;
+  XTDB has no full-text search, so `searchFullText()` and `*FullTextRelevance()` throw `UnsupportedFeatureException`.
+
+```php
+Order::query()->asOfTime(now()->subHour())->sum('total');   // the totals as they were an hour ago
+Word::suggest('word', $search)->limit(10)->get();
+```
 
 ## Testing
 
 ```bash
 docker run -d --name xtdb-test -p 127.0.0.1:5435:5432 -p 127.0.0.1:8083:8080 ghcr.io/xtdb/xtdb:2.2.0-beta3
 composer test        # Unit (no server) + Feature (XTDB on 127.0.0.1:5435)
+composer test:known-issues   # XTDB issues the driver works around, asserting PostgreSQL behaviour: failures expected
 composer phpstan
 composer cs
 ```

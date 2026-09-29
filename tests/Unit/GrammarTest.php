@@ -100,6 +100,37 @@ class GrammarTest extends TestCase
         $this->assertSame(['create table "posts" ("_id", "id", "title", "user_id", "created_at", "updated_at")'], $blueprint->toSql());
     }
 
+    public function test_as_of_time_reads_the_from_table_at_a_system_time(): void
+    {
+        $this->assertSame(
+            "select * from \"users\" for system_time as of TIMESTAMP '2026-01-02T03:04:05.000000+00:00' as \"u\" where \"u\".\"_id\" = ?",
+            $this->connection()->table('users as u')->asOfTime('2026-01-02 10:04:05+07:00')->where('u._id', 1)->toSql()
+        );
+        $this->assertSame(
+            'select * from "users"',
+            $this->connection()->table('users')->asOfTime('-10s')->readCurrent()->readStale()->toSql()
+        );
+    }
+
+    public function test_search_box(): void
+    {
+        $query = $this->connection()->table('words')->suggest('word', 'a_b%c');
+
+        $this->assertSame(
+            'select * from "words" where (position(lower(?) in lower("word")) = 1 or position(lower(?) in lower("word")) > 0) '
+            .'order by case when position(lower(?) in lower("word")) = 1 then 0 else 1 end, length("word"), "word" asc',
+            $query->toSql()
+        );
+        $this->assertSame(['a_b%c', 'a_b%c', 'a_b%c'], $query->getBindings());
+    }
+
+    public function test_full_text_is_not_supported(): void
+    {
+        $this->expectException(UnsupportedFeatureException::class);
+
+        $this->connection()->table('posts')->searchFullText('body', 'x');
+    }
+
     public function test_xtdb_types(): void
     {
         $this->assertSame(

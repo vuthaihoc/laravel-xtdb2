@@ -13,6 +13,11 @@ parameters:
             identifier: return.type
             path: src/Schema/Grammar.php
             message: '#should return (string|array<string>) but returns null\.#'
+        # SQL built from wrap()ped column names, not literal strings (Laravel 13's typing).
+        -
+            identifier: argument.type
+            message: '#(whereRaw|orderByRaw)\(\) expects .*literal-string#'
+            path: src/Query/Builder.php
         # Traits are used by applications' models.
         -
             identifier: trait.unused

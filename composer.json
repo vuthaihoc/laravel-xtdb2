@@ -16,7 +16,8 @@
         "ext-pdo_pgsql": "*",
         "illuminate/database": "^12.0 || ^13.0",
         "illuminate/support": "^12.0 || ^13.0",
-        "symfony/uid": "^7.0 || ^8.0"
+        "symfony/uid": "^7.0 || ^8.0",
+        "vuthaihoc/laravel-db-portable": "^0.7"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
@@ -45,6 +46,7 @@
         "test": "phpunit --colors",
         "test:unit": "phpunit --colors --testsuite=Unit",
         "test:feature": "phpunit --colors --testsuite=Feature",
+        "test:known-issues": "phpunit --colors --testsuite=KnownIssues",
         "phpstan": "phpstan analyse --memory-limit=-1",
         "cs": "pint --test",
         "cs:fix": "pint"
