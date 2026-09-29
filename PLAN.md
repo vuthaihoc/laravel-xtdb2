@@ -27,7 +27,7 @@ four small classes.
 | # | XTDB behaviour | Consequence / driver answer |
 |---|---|---|
 | 1 | Native prepared DML fails: *"client must specify types for all non-null params"* (PDO sends untyped params) | Emulated prepares, and the driver **inlines bindings itself as typed literals** |
-| 2 | Parameters bound as strings stay strings: `false` → `''`, `PARAM_BOOL` → `'t'`, a date string is text; comparing a timestamp column with a string param crashes the query | `Literal`: `TRUE`/`FALSE`, `TIMESTAMP '...'` for `DateTimeInterface` **and date-shaped strings** (Eloquent formats dates to strings; opt-out option), `{...}`/`[...]` for arrays, `E'...'` strings |
+| 2 | Parameters bound as strings stay strings: `false` → `''`, `PARAM_BOOL` → `'t'`, a date string is text; comparing a timestamp column that also holds text values crashes the query | `Literal`: `TRUE`/`FALSE`, `TIMESTAMP '...'` for `DateTimeInterface` **and date-shaped strings** (Eloquent formats dates to strings; opt-out option), `{...}`/`[...]` for arrays, `E'...'` strings |
 | 3 | 2.1.0: emoji (non-BMP) in `INSERT ... VALUES` breaks the parser | `E'...\UXXXXXXXX'` escapes (fixed in 2.2.0-beta3; keep the escape, harmless) |
 | 4 | `_id` is required; no autoincrement, no `lastval()`, `RETURNING` silently ignored | Primary key `_id`, ids generated client-side (ULID default); `insertGetId()` returns the generated id; `XtdbModel` trait / base model |
 | 5 | `INSERT` with an existing `_id` **replaces the whole document**; `PATCH ... RECORDS {...}` merges | `upsert()` → `PATCH`/`INSERT ... RECORDS` when `uniqueBy` is `_id`; no unique constraints otherwise (throw) |

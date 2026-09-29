@@ -6,6 +6,7 @@
   cacheDirectory=".phpunit.cache"
   failOnRisky="true"
   failOnWarning="true"
+  defaultTestSuite="Unit,Feature"
 >
   <testsuites>
     <testsuite name="Unit">
@@ -13,6 +14,10 @@
     </testsuite>
     <testsuite name="Feature">
       <directory>tests/Feature</directory>
+    </testsuite>
+    <!-- Known XTDB issues, asserting PostgreSQL behaviour: expected to fail until XTDB fixes them. -->
+    <testsuite name="KnownIssues">
+      <directory>tests/KnownIssues</directory>
     </testsuite>
   </testsuites>
   <php>
