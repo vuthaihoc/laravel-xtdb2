@@ -24,6 +24,7 @@ Guidance for Claude Code when working in this repository.
 - `src/Query/Processor.php` — XTDB types (`:utf8`, `[:? :i64]`, `[:timestamp-local :micro]`...) mapped to PostgreSQL names.
 - `src/Schema/Grammar.php`, `Builder.php` — `create`/`table` → `create table t (cols)` (2.2+, no types); drop → `ERASE` (`dropIfExists` checks `hasTable`: ERASE fails on unknown tables); indexes/keys are no-ops; `$transactions = false`; `information_schema` queries.
 - `src/Eloquent/HasXtdbKey.php` — `_id` key via `HasUlids`.
+- Bitemporal: `Query\Builder` keeps `$systemTime`/`$validTime` (read clauses, compiled by `Grammar::compileFrom()` between table and alias) and `$validPeriod` (writes: `_valid_from`/`_valid_to` values on insert, `FOR PORTION OF VALID_TIME` on update/delete via `compileWritePeriod()`); `erase()` → `compileErase()`. `src/Eloquent/Bitemporal.php` — `versions()`, `saveValidFrom()` (applies the period through `newModelQuery()`), `deleteValidFrom()`, `erase()`.
 - Requires `vuthaihoc/laravel-db-portable` (`../laravel-db-portable`): `Query\Builder` implements its `HistoricalReads` (`asOfTime()` → `FOR SYSTEM_TIME AS OF`, compiled in `Grammar::compileFrom()` between table and alias) and `SearchBox` (`position()`-based; no full-text).
 
 ## XTDB pitfalls (2.2.0-beta3)

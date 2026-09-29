@@ -70,6 +70,66 @@ User::where('settings->theme', 'dark')->whereJsonContains('settings->tags', 'a')
 - Laravel's `array`/`json` casts store JSON **text**, whose fields XTDB cannot query: use `AsDocument`, or bind
   `new LaravelXtdb\Query\Document([...])` in the query builder.
 
+## Bitemporal queries
+
+XTDB keeps every version of every row along two time axes: **valid time** (when a fact is true in your domain, which
+you can set, e.g. a price valid from next month or a correction of the past) and **system time** (when XTDB recorded
+it, which you cannot change). By default queries read the rows valid now, as currently recorded.
+
+```php
+// Writes for a period of valid time
+DB::table('prices')->validFrom('2026-01-01', '2026-07-01')->insert(['_id' => 'p1', 'price' => 10]);
+DB::table('prices')->validFrom('2026-07-01')->insert(['_id' => 'p1', 'price' => 12]);            // open-ended
+DB::table('prices')->validFrom('2026-03-01', '2026-04-01')->where('_id', 'p1')->update(['price' => 11]);
+DB::table('prices')->validFrom('2026-05-01', '2026-06-01')->where('_id', 'p1')->delete();          // gap in May
+DB::table('prices')->forAllValidTime()->where('_id', 'p1')->update(['price' => 9]);                // whole history
+
+// Reads
+DB::table('prices')->asOfValidTime('2026-03-15')->where('_id', 'p1')->value('price');           // 11
+DB::table('prices')->validBetween('2026-03-01', '2026-06-01')->get();                             // valid at some point
+DB::table('prices')->where('_id', 'p1')->history()->get();                                        // every version, with _valid_from/_valid_to
+DB::table('prices')->asOfSystemTime(now()->subDay())->asOfValidTime('2026-03-15')->get();        // as known yesterday
+DB::table('prices')->forAllValidTime()->forAllSystemTime()->get();                                // everything ever recorded
+
+// Removal
+DB::table('prices')->where('_id', 'p1')->delete();   // ends the validity now; the history stays
+DB::table('prices')->where('_id', 'p1')->erase();    // removes the row and its whole history
+```
+
+| Method | SQL |
+|---|---|
+| `asOfValidTime($t)`, `validBetween($from, $to = null)`, `forAllValidTime()` | `FOR VALID_TIME AS OF` / `FROM ... TO` / `FOR ALL VALID_TIME` on the `from` table |
+| `asOfSystemTime($t)` (= `asOfTime()`), `forAllSystemTime()` | `FOR SYSTEM_TIME AS OF` / `FOR ALL SYSTEM_TIME` |
+| `withValidTime()`, `history()` | selects `_valid_from`, `_valid_to`; `history()` = all valid time, oldest first |
+| `validFrom($from, $to = null)`, `validTo($to)` | insert: `_valid_from`/`_valid_to` values; update/delete: `FOR PORTION OF VALID_TIME FROM ... TO ...` |
+| `erase()` | `ERASE FROM ... WHERE ...` |
+| `readCurrent()` | drops the valid-time and system-time clauses |
+
+Times are a DateTimeInterface, a timestamp (UTC unless it has an offset) or a duration such as `'-10s'`. The clauses
+apply to the `from` table: joined tables and relation subqueries (`whereHas()`) read the current rows. An update or
+delete takes `validFrom()`/`validTo()` or `forAllValidTime()`, not `asOfValidTime()`. `upsert()` cannot take a valid
+time (XTDB's `PATCH` rejects `_valid_from`).
+
+### Models
+
+```php
+use LaravelXtdb\Eloquent\Bitemporal;
+use LaravelXtdb\Eloquent\HasXtdbKey;
+
+class Price extends Model
+{
+    use Bitemporal, HasXtdbKey;
+}
+
+Price::asOfValidTime('2026-03-15')->find('p1');
+$price->price = 13;
+$price->saveValidFrom('2026-09-01');            // valid from September, unbounded
+$price->saveValidFrom('2026-03-01', '2026-04-01');   // a correction for March only
+$price->versions();                             // every version, with _valid_from / _valid_to
+$price->deleteValidFrom('2026-01-01', '2026-02-01');
+$price->erase();                                // the row and its history are gone
+```
+
 ## Migrations
 
 XTDB tables are schemaless. A migration declares a table and its columns, so queries can name them before any row

@@ -8,6 +8,7 @@ use DateTimeZone;
 use DbPortable\Contracts\HistoricalReads;
 use DbPortable\Contracts\SearchBox;
 use Illuminate\Database\Query\Builder as BaseBuilder;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -17,17 +18,36 @@ use LaravelXtdb\Exceptions\UnsupportedFeatureException;
  * Every XTDB row needs an _id, and XTDB generates none: the builder adds a
  * ULID to the rows inserted without one.
  *
+ * Bitemporal queries: reads at a valid time and/or a system time
+ * (asOfValidTime(), validBetween(), forAllValidTime(), asOfSystemTime(),
+ * history()) and writes for a period of valid time (validFrom(), validTo(),
+ * erase()).
+ *
  * Implements laravel-db-portable's contracts: historical reads through
- * XTDB's system time, and the search box helpers with LIKE (XTDB has no
- * full-text search).
+ * XTDB's system time, and the search box helpers with position() (XTDB has
+ * no full-text search).
  */
 class Builder extends BaseBuilder implements HistoricalReads, SearchBox
 {
     /**
-     * The instant the "from" table is read at (FOR SYSTEM_TIME AS OF), as a
-     * TIMESTAMP literal.
+     * The system time the "from" table is read at: "for system_time as of ...",
+     * "for all system_time"...
      */
     public ?string $systemTime = null;
+
+    /**
+     * The valid time the "from" table is read at, or the one an update/delete
+     * applies to: "for valid_time as of ...", "for all valid_time"...
+     */
+    public ?string $validTime = null;
+
+    /**
+     * The period of valid time the next insert, update or delete applies to,
+     * as TIMESTAMP literals: [from, to], null meaning now / unbounded.
+     *
+     * @var array{0: string|null, 1: string|null}|null
+     */
+    public ?array $validPeriod = null;
 
     /**
      * @param  array<array-key, mixed>  $values
@@ -44,7 +64,15 @@ class Builder extends BaseBuilder implements HistoricalReads, SearchBox
 
         foreach ($values as $index => $row) {
             if (is_array($row) && ! array_key_exists('_id', $row)) {
-                $values[$index] = ['_id' => static::newId()] + $row;
+                $values[$index] = $row = ['_id' => static::newId()] + $row;
+            }
+
+            if (is_array($row) && $this->validPeriod !== null) {
+                [$from, $to] = $this->validPeriod;
+                $values[$index] = $row + array_filter([
+                    '_valid_from' => $from === null ? null : new Expression($from),
+                    '_valid_to' => $to === null ? null : new Expression($to),
+                ]);
             }
         }
 
@@ -105,9 +133,140 @@ class Builder extends BaseBuilder implements HistoricalReads, SearchBox
      */
     public function asOfTime(DateTimeInterface|string $time): static
     {
-        $this->systemTime = "TIMESTAMP '".static::instant($time)->format('Y-m-d\TH:i:s.uP')."'";
+        $this->systemTime = 'for system_time as of '.static::timestamp($time);
 
         return $this;
+    }
+
+    /**
+     * asOfTime(): the "from" table as XTDB had stored it at a system time.
+     *
+     * @return $this
+     */
+    public function asOfSystemTime(DateTimeInterface|string $time): static
+    {
+        return $this->asOfTime($time);
+    }
+
+    /**
+     * Every version XTDB has stored, including the ones later corrected.
+     *
+     * @return $this
+     */
+    public function forAllSystemTime(): static
+    {
+        $this->systemTime = 'for all system_time';
+
+        return $this;
+    }
+
+    /**
+     * The rows valid at a point in time (by default XTDB reads the rows valid now).
+     *
+     * @return $this
+     */
+    public function asOfValidTime(DateTimeInterface|string $time): static
+    {
+        $this->validTime = 'for valid_time as of '.static::timestamp($time);
+
+        return $this;
+    }
+
+    /**
+     * The rows valid at some point of a period, $to null meaning unbounded.
+     *
+     * @return $this
+     */
+    public function validBetween(DateTimeInterface|string $from, DateTimeInterface|string|null $to = null): static
+    {
+        $this->validTime = 'for valid_time from '.static::timestamp($from).' to '.($to === null ? 'NULL' : static::timestamp($to));
+
+        return $this;
+    }
+
+    /**
+     * Every valid-time version. On update() and delete(): the whole history.
+     *
+     * @return $this
+     */
+    public function forAllValidTime(): static
+    {
+        $this->validTime = 'for all valid_time';
+
+        return $this;
+    }
+
+    /**
+     * Select the valid-time period of each row as well (_valid_from, _valid_to).
+     *
+     * @return $this
+     */
+    public function withValidTime(): static
+    {
+        if ($this->columns === null) {
+            $this->columns = ['*'];
+        }
+
+        return $this->addSelect(['_valid_from', '_valid_to']);
+    }
+
+    /**
+     * Every valid-time version with its period, oldest first.
+     *
+     * @return $this
+     */
+    public function history(): static
+    {
+        return $this->forAllValidTime()->withValidTime()->orderBy('_valid_from');
+    }
+
+    /**
+     * The next insert, update or delete applies from $from (null: now). An
+     * insert stores the row for that period; an update or delete changes only
+     * that part of the history (FOR PORTION OF VALID_TIME).
+     *
+     * @return $this
+     */
+    public function validFrom(DateTimeInterface|string|null $from, DateTimeInterface|string|null $to = null): static
+    {
+        $this->validPeriod = [$from === null ? null : static::timestamp($from), $to === null ? null : static::timestamp($to)];
+
+        return $this;
+    }
+
+    /**
+     * The next insert, update or delete applies until $to.
+     *
+     * @return $this
+     */
+    public function validTo(DateTimeInterface|string|null $to): static
+    {
+        $this->validPeriod = [$this->validPeriod[0] ?? null, $to === null ? null : static::timestamp($to)];
+
+        return $this;
+    }
+
+    /**
+     * Remove the matching rows and their whole history (e.g. to comply with
+     * a data deletion request); delete() only ends their validity.
+     */
+    public function erase(): int
+    {
+        /** @var Grammar $grammar */
+        $grammar = $this->grammar;
+
+        return $this->connection->delete(
+            $grammar->compileErase($this),
+            $this->cleanBindings($grammar->prepareBindingsForDelete($this->bindings))
+        );
+    }
+
+    /**
+     * An XTDB TIMESTAMP literal of a UTC instant.
+     */
+    public static function timestamp(DateTimeInterface|string $time): string
+    {
+        return "TIMESTAMP '".static::instant($time)->format('Y-m-d\TH:i:s.uP')."'";
     }
 
     /**
@@ -126,6 +285,7 @@ class Builder extends BaseBuilder implements HistoricalReads, SearchBox
     public function readCurrent(): static
     {
         $this->systemTime = null;
+        $this->validTime = null;
 
         return $this;
     }

@@ -62,7 +62,7 @@ columns keep their types after `ERASE`.
 - Transactions: write-only mode, clear exception on reads (finding 6), savepoints off (7)
 - `Xtdb\Eloquent\XtdbModel` (or `HasXtdbKey` trait): `_id` key, ULID ids, `AsDocument` cast
 
-### Phase 2: bitemporal API (the reason to use XTDB)
+### Phase 2: bitemporal API (the reason to use XTDB) — done (v0.2.0-beta1)
 - Builder: `asOfValidTime()`, `asOfSystemTime()`, `forAllValidTime()`, `validBetween()`, `history()`
 - Writes with valid time: `validFrom()`/`validTo()` on insert/update/delete (`FOR PORTION OF VALID_TIME`)
 - `erase()` (GDPR hard delete) vs `delete()` (ends validity)

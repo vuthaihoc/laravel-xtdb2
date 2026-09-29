@@ -14,22 +14,86 @@ use LaravelXtdb\XtdbConnection;
 class Grammar extends PostgresGrammar
 {
     /**
-     * FOR SYSTEM_TIME AS OF goes between the table and its alias.
+     * FOR SYSTEM_TIME / FOR VALID_TIME clauses go between the table and its alias.
      *
      * @param  Expression|string  $table
      */
     protected function compileFrom(BaseBuilder $query, $table)
     {
-        if (! $query instanceof Builder || $query->systemTime === null || ! is_string($table)) {
+        $clauses = $query instanceof Builder ? array_filter([$query->systemTime, $query->validTime]) : [];
+
+        if ($clauses === [] || ! is_string($table)) {
             return parent::compileFrom($query, $table); // @phpstan-ignore argument.type (Laravel accepts expressions)
         }
 
-        $clause = ' for system_time as of '.$query->systemTime;
+        return 'from '.$this->tableWithClause($table, ' '.implode(' ', $clauses));
+    }
+
+    /**
+     * The wrapped table, $clause, then the wrapped alias if any.
+     */
+    protected function tableWithClause(string $table, string $clause): string
+    {
         $parts = preg_split('/\s+as\s+/i', $table) ?: [$table];
 
         return count($parts) === 2
-            ? 'from '.$this->wrapTable($parts[0]).$clause.' as '.$this->wrapValue($this->getTablePrefix().$parts[1])
-            : 'from '.$this->wrapTable($table).$clause;
+            ? $this->wrapTable($parts[0]).$clause.' as '.$this->wrapValue($this->getTablePrefix().$parts[1])
+            : $this->wrapTable($table).$clause;
+    }
+
+    /**
+     * The valid-time clause of an update or delete: FOR PORTION OF VALID_TIME
+     * after validFrom()/validTo(), FOR ALL VALID_TIME after forAllValidTime().
+     */
+    protected function compileWritePeriod(BaseBuilder $query): string
+    {
+        if (! $query instanceof Builder) {
+            return '';
+        }
+
+        if ($query->validPeriod !== null) {
+            [$from, $to] = $query->validPeriod;
+
+            return ' for portion of valid_time from '.($from ?? 'CURRENT_TIMESTAMP').' to '.($to ?? 'NULL');
+        }
+
+        return match ($query->validTime) {
+            null => '',
+            'for all valid_time' => ' for all valid_time',
+            default => throw new UnsupportedFeatureException('An update or delete applies to a period of valid time: use validFrom()/validTo() or forAllValidTime().'),
+        };
+    }
+
+    /**
+     * @param  string  $table
+     * @param  string  $columns
+     * @param  string  $where
+     */
+    protected function compileUpdateWithoutJoins(BaseBuilder $query, $table, $columns, $where)
+    {
+        return 'update '.$this->tableWithClause((string) $this->getValue($query->from), $this->compileWritePeriod($query))." set {$columns} {$where}";
+    }
+
+    /**
+     * @param  string  $table
+     * @param  string  $where
+     */
+    protected function compileDeleteWithoutJoins(BaseBuilder $query, $table, $where)
+    {
+        return 'delete from '.$this->tableWithClause((string) $this->getValue($query->from), $this->compileWritePeriod($query))." {$where}";
+    }
+
+    /**
+     * ERASE removes the matching rows with their whole history.
+     */
+    public function compileErase(BaseBuilder $query): string
+    {
+        if (isset($query->joins) || isset($query->limit)) {
+            return 'erase from '.$this->wrapTable($query->from)
+                .' where '.$this->wrap('_id').' in ('.$this->compileSelect((clone $query)->select($this->fromAlias($query).'._id')).')';
+        }
+
+        return trim('erase from '.$this->wrapTable($query->from).' '.$this->compileWheres($query));
     }
 
     /**
@@ -235,16 +299,31 @@ class Grammar extends PostgresGrammar
     {
         $alias = $this->fromAlias($query);
 
-        return 'update '.$this->wrapTable($query->from).' set '.$this->compileUpdateColumns($query, $values)
-            .' where '.$this->wrap('_id').' in ('.$this->compileSelect($query->select($alias.'._id')).')';
+        return 'update '.$this->tableWithClause((string) $this->getValue($query->from), $this->compileWritePeriod($query)).' set '.$this->compileUpdateColumns($query, $values)
+            .' where '.$this->wrap('_id').' in ('.$this->compileSelect($this->withoutWritePeriod($query)->select($alias.'._id')).')';
     }
 
     protected function compileDeleteWithJoinsOrLimit(BaseBuilder $query)
     {
         $alias = $this->fromAlias($query);
 
-        return 'delete from '.$this->wrapTable($query->from)
-            .' where '.$this->wrap('_id').' in ('.$this->compileSelect($query->select($alias.'._id')).')';
+        return 'delete from '.$this->tableWithClause((string) $this->getValue($query->from), $this->compileWritePeriod($query))
+            .' where '.$this->wrap('_id').' in ('.$this->compileSelect($this->withoutWritePeriod($query)->select($alias.'._id')).')';
+    }
+
+    /**
+     * The query selecting the rows to write: its period applies to the write, not the read.
+     */
+    protected function withoutWritePeriod(BaseBuilder $query): BaseBuilder
+    {
+        $select = clone $query;
+
+        if ($select instanceof Builder) {
+            $select->validPeriod = null;
+            $select->validTime = null;
+        }
+
+        return $select;
     }
 
     /**

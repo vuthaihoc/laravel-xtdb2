@@ -16,7 +16,7 @@ parameters:
         # SQL built from wrap()ped column names, not literal strings (Laravel 13's typing).
         -
             identifier: argument.type
-            message: '#(whereRaw|orderByRaw)\(\) expects .*literal-string#'
+            message: '#((whereRaw|orderByRaw)\(\) expects .*literal-string|Expression constructor expects TValue of float\|int\|literal-string)#'
             path: src/Query/Builder.php
         # Traits are used by applications' models.
         -
