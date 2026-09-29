@@ -1,0 +1,12 @@
+{
+    "require": {
+        "php": "^8.2",
+        "illuminate/database": "^12.0",
+        "illuminate/events": "^12.0",
+        "illuminate/filesystem": "^12.0",
+        "illuminate/pagination": "^12.0",
+        "symfony/uid": "^7.0"
+    },
+    "autoload": { "psr-4": { "Xtdb\\": "src/" } },
+    "config": { "sort-packages": true }
+}

@@ -1,0 +1,85 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Pint + PHPStan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.4
+          extensions: pdo_pgsql
+          coverage: none
+
+      - uses: ramsey/composer-install@v4
+
+      - run: composer cs
+      - run: composer phpstan -- --error-format=github
+
+  tests:
+    name: PHP ${{ matrix.php }} - Laravel ${{ matrix.laravel }} - XTDB ${{ matrix.xtdb }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { php: '8.2', laravel: '12.*', testbench: '^10.0', xtdb: 2.2.0-beta3 }
+          - { php: '8.3', laravel: '12.*', testbench: '^10.0', xtdb: 2.2.0-beta3 }
+          - { php: '8.3', laravel: '13.*', testbench: '^11.0', xtdb: 2.2.0-beta3 }
+          - { php: '8.4', laravel: '13.*', testbench: '^11.0', xtdb: 2.2.0-beta3 }
+
+    env:
+      XTDB_HOST: 127.0.0.1
+      XTDB_PORT: 5435
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Start XTDB
+        run: >
+          docker run -d --name xtdb -p 127.0.0.1:5435:5432 -p 127.0.0.1:8083:8080
+          ghcr.io/xtdb/xtdb:${{ matrix.xtdb }}
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_pgsql
+          coverage: none
+
+      - name: Require Laravel ${{ matrix.laravel }}
+        run: >
+          composer require --dev --no-update --no-interaction
+          "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}"
+
+      # composer update, so a lock file cannot override the Laravel version above.
+      - uses: ramsey/composer-install@v4
+        with:
+          dependency-versions: highest
+
+      - name: Wait for XTDB
+        run: |
+          for i in $(seq 1 90); do
+            curl -sf http://127.0.0.1:8083/healthz/alive >/dev/null && exit 0
+            sleep 2
+          done
+          docker logs --tail 100 xtdb
+          exit 1
+
+      - run: vendor/bin/phpunit --colors=always
+
+      - name: XTDB logs
+        if: failure()
+        run: docker logs --tail 200 xtdb

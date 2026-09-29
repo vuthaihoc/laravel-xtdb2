@@ -1,0 +1,18 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 8
+    paths:
+        - src
+    reportUnmatchedIgnoredErrors: true
+    ignoreErrors:
+        # Laravel's schema Blueprint skips commands whose compile method returns null;
+        # the parent docblocks declare string.
+        -
+            identifier: return.type
+            path: src/Schema/Grammar.php
+            message: '#should return (string|array<string>) but returns null\.#'
+        # Traits are used by applications' models.
+        -
+            identifier: trait.unused
