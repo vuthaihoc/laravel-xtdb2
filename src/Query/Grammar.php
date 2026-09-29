@@ -239,9 +239,9 @@ class Grammar extends PostgresGrammar
     }
 
     /**
-     * whereJsonContains(): a scalar in a list. "IS TRUE" works around XTDB
-     * 2.2.0-beta3 dropping matches when "? = any(list)" is null for other rows
-     * and is followed by another AND condition.
+     * whereJsonContains(): a scalar in a list. The parentheses are required:
+     * XTDB evaluates "? = any(list)" followed by AND/OR as false (it parses the
+     * rest of the condition into the ANY).
      *
      * @param  string  $column
      * @param  string  $value

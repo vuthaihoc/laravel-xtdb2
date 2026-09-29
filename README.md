@@ -204,8 +204,8 @@ advice. Nested transactions are part of the outer one (XTDB has no savepoints).
 | window functions, `HAVING` on select aliases, subqueries in `UPDATE ... SET` | not supported by XTDB |
 | `min`/`max`/`sum`/`avg` of a column that never held a value | `null` (XTDB raises an error; the driver returns null) |
 
-XTDB 2.2.0-beta3 issues the driver works around: `? = any(list)` followed by another `AND` condition loses rows when
-the list is null in other rows (compiled as `(? = any(list)) is true`), and `LIKE ... ESCAPE` matches nothing, so `%`
+XTDB 2.2.0-beta3 issues the driver works around: `? = any(list)` followed by `AND`/`OR` evaluates to false (XTDB
+parses the rest of the condition into the `ANY`; compiled as `(? = any(list)) is true`), and `LIKE ... ESCAPE` matches nothing, so `%`
 and `_` cannot be matched literally with `like` (the search helpers use `position()`).
 
 ## laravel-db-portable

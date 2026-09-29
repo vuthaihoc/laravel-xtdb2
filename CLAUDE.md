@@ -34,7 +34,7 @@ Guidance for Claude Code when working in this repository.
 - Unknown tables and columns are errors: migrations declare them; `ERASE` on an unknown table fails.
 - A column keeps the types it ever held, even after `ERASE`: mixed `_id` types break `ORDER BY`.
 - `min/max/sum/avg` over a never-valued column (type `:nothing`) raise errors.
-- `? = any(list) and <other>` loses rows when the list is null elsewhere; `any(coalesce(list, []))` crashes the server.
+- `? = any(list)` followed by `AND`/`OR` evaluates to false (parenthesise it); two chained ones fail with `Unknown symbol: '_sq_N'`; `any(coalesce(list, []))` crashes the server.
 - `update`/`delete` report 0 affected rows; `RETURNING` is ignored; `insert` of an existing `_id` replaces the row.
 - `LIKE ... ESCAPE` matches nothing (no literal `%`/`_`): use `position()`.
 - No `ilike`, `for update`, `on conflict`, `random()`, window functions, subqueries in `UPDATE ... SET`, `HAVING` on aliases.

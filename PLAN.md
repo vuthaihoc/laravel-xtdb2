@@ -50,7 +50,7 @@ four small classes.
 
 ### Phase 1: core driver (XTDB 2.2+) — done (57 tests on 2.2.0-beta3, Laravel 12 and 13)
 Found while building it: `ERASE` fails on unknown tables, migrations must not run in transactions,
-min/max/sum/avg fail on never-valued columns, `? = any(list) and ...` loses rows (worked around), and
+min/max/sum/avg fail on never-valued columns, `? = any(list)` followed by `AND`/`OR` is false (parenthesised as a workaround), and
 columns keep their types after `ERASE`.
 - `XtdbServiceProvider` (driver `xtdb`), `XtdbConnector` (emulated prepares, no search_path), `XtdbConnection`
 - `Literal` binding inliner (findings 1–3) with unit tests: escaping, emoji, dates, arrays, enums, injection attempts

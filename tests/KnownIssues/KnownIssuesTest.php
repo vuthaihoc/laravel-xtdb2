@@ -5,8 +5,8 @@ namespace LaravelXtdb\Tests\KnownIssues;
 use Throwable;
 
 /**
- * Last verified against XTDB 2.2.0-beta3: 23 failures (open issues) and 2
- * passes (fixed since 2.1.0, kept as regression checks).
+ * Last verified against XTDB 2.2.0-beta3 and the 2026-09-28 nightly: 24 failures
+ * (open issues) and 2 passes (fixed since 2.1.0, kept as regression checks).
  */
 class KnownIssuesTest extends TestCase
 {
@@ -56,15 +56,25 @@ class KnownIssuesTest extends TestCase
     }
 
     /**
-     * "x = any(list) and <condition>" loses the matching row when the list is null in other rows;
-     * the same conditions in the other order find it.
+     * "x = any(list)" as the left operand of AND/OR evaluates to false, whatever the other operand;
+     * parenthesised it is right. Two chained ones fail with "Unknown symbol: '_sq_N'". Also in 2.1.0.
      * Driver workaround: whereJsonContains() compiles to "(? = any(list)) is true".
      */
     public function test_any_followed_by_another_condition(): void
     {
         $rows = $this->runSql(
-            'insert into '.$this->table('any')." records {_id: 1, tags: ['a'], deleted_at: NULL}, {_id: 2, tags: NULL, deleted_at: NULL}",
-            'select _id from '.$this->table('any')." where 'a' = any(tags) and deleted_at is null",
+            'insert into '.$this->table('any')." records {_id: 1, tags: ['a', 'b']}",
+            'select _id from '.$this->table('any')." where 'a' = any(tags) and true",
+        );
+
+        $this->assertSame([['_id' => 1]], $rows);
+    }
+
+    public function test_two_quantified_comparisons(): void
+    {
+        $rows = $this->runSql(
+            'insert into '.$this->table('any2')." records {_id: 1, tags: ['a', 'b']}",
+            'select _id from '.$this->table('any2')." where 'a' = any(tags) and 'b' = any(tags)",
         );
 
         $this->assertSame([['_id' => 1]], $rows);
