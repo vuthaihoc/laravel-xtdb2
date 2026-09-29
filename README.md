@@ -3,6 +3,8 @@
 A Laravel 12 / 13 database driver for [XTDB 2](https://github.com/xtdb/xtdb): Eloquent, the query builder and
 migrations over XTDB's PostgreSQL wire protocol.
 
+**Documentation: https://vuthaihoc.github.io/laravel-xtdb2/** — including [Bitemporal data: concepts and use cases](https://vuthaihoc.github.io/laravel-xtdb2/docs/bitemporal).
+
 > **Pre-release.** Requires **XTDB 2.2** (tested on `2.2.0-beta3`): migrations need its `CREATE TABLE`.
 
 XTDB is not PostgreSQL: tables are schemaless, every row has an `_id`, all history is kept (bitemporal), and a
@@ -71,6 +73,10 @@ User::where('settings->theme', 'dark')->whereJsonContains('settings->tags', 'a')
   `new LaravelXtdb\Query\Document([...])` in the query builder.
 
 ## Bitemporal queries
+
+See [docs/docs/bitemporal.md](docs/docs/bitemporal.md) for the concepts and real-world use cases (scheduled price
+changes, back-dated salary corrections, reproducible reports, historical addresses, coverage periods, GDPR erasure,
+month-end snapshots).
 
 XTDB keeps every version of every row along two time axes: **valid time** (when a fact is true in your domain, which
 you can set, e.g. a price valid from next month or a correction of the past) and **system time** (when XTDB recorded

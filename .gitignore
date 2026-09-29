@@ -7,3 +7,6 @@ phpunit.xml
 /.vscode
 .DS_Store
 /CLAUDE.local.md
+/docs/node_modules
+/docs/.vitepress/dist
+/docs/.vitepress/cache

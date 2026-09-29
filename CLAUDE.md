@@ -10,6 +10,7 @@ Guidance for Claude Code when working in this repository.
 
 - `composer test` — PHPUnit. `Unit` needs no server; `Feature` needs XTDB on 127.0.0.1:5435 (`docker run -d --name xtdb-beta3 -p 127.0.0.1:5435:5432 -p 127.0.0.1:8083:8080 ghcr.io/xtdb/xtdb:2.2.0-beta3`, add `--tmpfs /var/lib/xtdb:uid=20000,gid=20000` for a disposable store). Feature tests must pass twice in a row (tables survive erasure).
 - `composer test:known-issues` — `tests/KnownIssues`: XTDB bugs and PostgreSQL differences in plain SQL, asserting PostgreSQL behaviour. Excluded from `composer test`; failures are expected until XTDB fixes them (a test that starts passing means a workaround can be reconsidered). Add one for every new XTDB limit the driver works around.
+- `cd docs && npm install && npm run build` — the VitePress documentation site (`docs/docs/*.md`), deployed to GitHub Pages by `.github/workflows/docs.yml`. Keep README and the docs pages in sync; the examples of `docs/docs/bitemporal.md` are exercised by `tests/Feature/BitemporalUseCasesTest.php`.
 - `composer phpstan` (level 8, larastan), `composer cs` / `composer cs:fix` (Pint).
 
 ## Architecture
